@@ -1,0 +1,150 @@
+<%
+
+fields = [
+  {
+    title: 'Wallarm API TOKEN',
+    field: 'wallarm_api_token',
+    description: 'Your Wallarm node token. Can be found at "https://my.wallarm.com/nodes"',
+    type: :string,
+    advanced: false
+  },
+  {
+    title: 'App host',
+    field: 'app_host',
+    description: 'Address of your application (ip or name will do)',
+    type: :string,
+    advanced: false
+  },
+  {
+    title: 'App port',
+    field: 'app_port',
+    description: 'Port of your application (defaults to 8080)',
+    type: :string,
+    advanced: false
+  },
+  {
+    title: 'Policy Id',
+    field: 'policy_id',
+    description: 'Policy Id to use. Leave blank for default policy',
+    type: :string,
+    advanced: false
+  },
+  {
+    title: 'Test record Id',
+    field: 'test_record_id',
+    description: 'Test record you wish to use. Leave blank to use the latest one available',
+    type: :string,
+    advanced: false
+  },
+  {
+    title: 'Wallarm API host',
+    field: 'wallarm_api_host',
+    description: 'Wallarm API. use "us1.api.wallarm.com" for North America (default) and "api.wallarm.com" for Europe',
+    type: :string,
+    advanced: false
+  },
+  {
+    title: 'Test run name',
+    field: 'test_run_name',
+    description: 'Name of your TestRun (optional)',
+    type: :string,
+    advanced: false
+  },
+  {
+    title: 'Test run description',
+    field: 'test_run_desc',
+    description: 'TestRun description (optional)',
+    type: :string,
+    advanced: false
+  },
+  {
+    title: 'Stop on first fail',
+    field: 'stop_on_first_fail',
+    description: 'Stop running tests as soon as a vulnerability is found',
+    type: :boolean,
+    advanced: false
+  },
+  {
+    title: 'Fail build',
+    field: 'fail_build',
+    description: 'Fail build on completion if vulnerabilities are found',
+    type: :boolean,
+    advanced: false
+  },
+
+  {
+    title: 'Without sudo',
+    field: 'without_sudo',
+    description: 'If checked, calls docker without sudo',
+    type: :boolean,
+    advanced: true
+  },
+  {
+    title: 'Local docker network',
+    field: 'local_docker_network',
+    description: 'Adds the `--net your_network` paramater to FAST. Useful when your application runs inside of a docker container',
+    type: :string,
+    advanced: true
+  },
+  {
+    title: 'Wallarm version',
+    field: 'wallarm_version',
+    description: 'Wallarm/fast version. Leave blank for latest',
+    type: :string,
+    advanced: true
+  },
+  {
+    title: 'Inactivity timeout',
+    field: 'inactivity_timeout',
+    description: 'Autoshutdown timer in seconds. Can be from 0 to 691200 (1 week). Defaults to 600 seconds (10 minutes)',
+    type: :integer,
+    advanced: true
+  },
+  {
+    title: 'RPS limit',
+    field: 'test_run_rps',
+    description: 'Request per second limit for your test run (optional)',
+    type: :integer,
+    advanced: true
+  }
+]
+
+
+f = taglib("/lib/form")
+
+fields.reject{|field| field[:advanced] }.each do |field|
+  f.entry(title: field[:title], field: field[:field], description: field[:description]) do
+    case field[:type]
+    when :string
+      f.textbox
+    when :integer
+      f.textbox
+    when :boolean
+      f.checkbox
+    else
+      f.textbox
+    end
+  end
+end
+
+f.advanced do 
+
+  fields.select{|field| field[:advanced] }.each do |field|
+    f.entry(title: field[:title], field: field[:field], description: field[:description]) do
+      case field[:type]
+      when :string
+        f.textbox
+      when :integer
+        f.textbox
+      when :boolean
+        f.checkbox
+      else
+        f.textbox
+      end
+    end
+  end
+
+end
+
+%>
+

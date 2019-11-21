@@ -1,0 +1,17 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    jenkins-plugin-runtime (0.2.3)
+      json
+      slop (~> 3.0.2)
+    json (2.2.0-java)
+    slop (3.0.4)
+
+PLATFORMS
+  java
+
+DEPENDENCIES
+  jenkins-plugin-runtime (~> 0.2.3)
+
+BUNDLED WITH
+   2.0.2
