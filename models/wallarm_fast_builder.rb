@@ -7,11 +7,14 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
   attr_accessor :wallarm_api_token,
                 :app_host,
                 :app_port,
+                :fast_port,
+                :fast_name,
                 :policy_id,
                 :test_record_id,
                 :wallarm_api_host,
                 :test_run_name,
                 :test_run_desc,
+                :record,
                 :stop_on_first_fail,
                 :fail_build,
                 :without_sudo,
@@ -23,23 +26,31 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
   # Invoked with the form parameters when this extension point
   # is created from a configuration screen.
   def initialize(attrs = {})
+    attrs.delete_if { |_key, value| value.is_a?(String) && value.empty? }
+
     @wallarm_api_token    = attrs.fetch('wallarm_api_token', '')
-    @app_host             = attrs.fetch('app_host', nil)
+    @app_host             = attrs.fetch('app_host', '127.0.0.1')
     @app_port             = attrs.fetch('app_port', 8080)
+    @fast_port            = attrs.fetch('fast_port', nil)
+
     @policy_id            = attrs.fetch('policy_id', nil)
     @test_record_id       = attrs.fetch('test_record_id', nil)
-    @wallarm_api_host     = string_fetch(attrs['wallarm_api_host'], 'us1.api.wallarm.com')
-
+    @wallarm_api_host     = attrs.fetch('wallarm_api_host', 'us1.api.wallarm.com')
     @test_run_name        = attrs.fetch('test_run_name', nil)
     @test_run_desc        = attrs.fetch('test_run_desc', nil)
+
+    @record               = attrs.fetch('record', false)
     @stop_on_first_fail   = attrs.fetch('stop_on_first_fail', false)
     @fail_build           = attrs.fetch('fail_build', true)
-
     @without_sudo         = attrs.fetch('without_sudo', false)
     @local_docker_network = attrs.fetch('local_docker_network', nil) # used when target application is inside a docker network
-    @wallarm_version      = string_fetch(attrs['wallarm_version'], 'latest')
+
+    @wallarm_version      = attrs.fetch('wallarm_version', 'latest')
     @inactivity_timeout   = attrs.fetch('inactivity_timeout', nil)
     @test_run_rps         = attrs.fetch('test_run_rps', nil)
+
+    default_fast_name = @record ? 'wallarm_fast_recorder' : 'wallarm_fast_tester'
+    @fast_name = attrs.fetch('fast_name', default_fast_name)
   end
 
   ##
@@ -56,34 +67,16 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
   # @param [Jenkins::Launcher] launcher the launcher that can run code on the node running this build
   # @param [Jenkins::Model::Listener] listener the listener for this build.
   def perform(build, launcher, listener)
-    @app_port = '8080' if @app_port.nil? || @app_port.empty?
-    @app_host = '127.0.0.1' if @app_host.nil? || @app_host.empty?
-
     cmd = []
-
     add_required_params(cmd)
     add_optional_params(cmd)
     add_params_with_default_values(cmd)
 
-    listener.info('Starting wallarm FAST tests...')
-    test_run_status = launcher.execute({'WALLARM_API_TOKEN' => @wallarm_api_token.to_s}, cmd.join(' '), out: listener)
-    listener.info("Test run status: #{test_run_status}")
-    listener.info('Finishing wallarm FAST tests...')
-
-    if test_run_status != 0
-      if @fail_build
-        build.halt 'Security tests failed! Halting build'
-      else
-        listener.info('Security tests failed! Build set to not fail')
-      end
+    if @record
+      record_baselines(cmd, build, launcher, listener)
     else
-      listener.info('Security tests passed!')
+      run_tests(cmd, build, launcher, listener)
     end
-  ensure
-    cmd = []
-    cmd << 'sudo' unless @without_sudo
-    cmd << 'docker kill wallarm_fast'
-    launcher.execute(cmd.join(' '))
   end
 
   private
@@ -92,21 +85,20 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
     param && !param.empty?
   end
 
-  def string_fetch(param, default)
-    if not_empty?(param)
-      param
-    else
-      default
-    end
-  end
-
   def add_required_params(cmd)
-    cmd << 'sudo' unless @without_sudo
     cmd << 'docker run --rm'
-    cmd << '--name wallarm_fast'
-    cmd << '-e CI_MODE=testing'
-    cmd << "-e TEST_RUN_URI=http://#{@app_host}:#{@app_port}"
-    cmd << "-e WALLARM_API_TOKEN=$WALLARM_API_TOKEN"
+    cmd << "--name #{@fast_name}"
+
+    if @record
+      cmd << '-d'
+      cmd << '-e CI_MODE=recording'
+      cmd << "-p #{@fast_port}:8080"
+    else
+      cmd << '-e CI_MODE=testing'
+      cmd << "-e TEST_RUN_URI=http://#{@app_host}:#{@app_port}"
+    end
+
+    cmd << '-e WALLARM_API_TOKEN=$WALLARM_API_TOKEN'
   end
 
   def add_optional_params(cmd)
@@ -124,5 +116,84 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
   def add_params_with_default_values(cmd)
     cmd << "-e WALLARM_API_HOST=#{@wallarm_api_host}"
     cmd << "wallarm/fast:#{@wallarm_version}"
+  end
+
+  def shell_command(launcher, cmd, env = {})
+    r, w = IO.pipe
+
+    execute_cmd(launcher, cmd, env, out: w)
+    w.close
+
+    result = r.read.chomp
+    r.close
+    result
+  end
+
+  def execute_cmd(launcher, cmd, env = {}, opts = {})
+    cmd.unshift('sudo') unless @without_sudo
+    launcher.execute(env, cmd.join(' '), opts)
+  end
+
+  def record_baselines(cmd, build, launcher, listener)
+    listener.info('Launching FAST for recording...')
+
+    docker_id = shell_command(launcher, cmd, 'WALLARM_API_TOKEN' => @wallarm_api_token.to_s)
+    if docker_id.include? 'Error'
+      listener.error(docker_id)
+      build.halt 'Cannot start FAST docker due to docker conflict'
+    end
+
+    listener.info('Waiting for ready status')
+    cmd_for_health = ["docker exec -t #{docker_id} supervisorctl status proxy"]
+
+    10.times do |i|
+      health = shell_command(launcher, cmd_for_health)
+      listener.info("health check: #{health}")
+      break if health.include? 'RUNNING'
+
+      sleep 10
+
+      next unless i == 9
+
+      kill_cmd = new_cmd
+      kill_cmd << "docker kill #{docker_id}"
+      shell_command(launcher, kill_cmd)
+      build.halt 'Cannot start FAST docker due to timeout on proxy'
+    end
+
+    listener.info('FAST is ready to record')
+
+    # No cleanup here.
+    # If next step starts, then we get a chance to kill existing dockers.
+    # Otherwise it will be hanging
+  end
+
+  def run_tests(cmd, build, launcher, listener)
+    # there may be a running fast recorder
+    # we have no way of knowing if one exists,
+    # or what name it has
+
+    listener.info('Starting Wallarm FAST tests...')
+    test_run_status = execute_cmd(
+      launcher,
+      cmd,
+      { 'WALLARM_API_TOKEN' => @wallarm_api_token.to_s },
+      out: listener
+    )
+
+    listener.info("Test run status: #{test_run_status}")
+    listener.info('Finishing Wallarm FAST tests...')
+
+    if test_run_status != 0
+      if @fail_build
+        build.halt 'Security tests failed! Halting build'
+      else
+        listener.info('Security tests failed! Build set to not fail')
+      end
+    else
+      listener.info('Security tests passed!')
+    end
+  ensure
+    execute_cmd('docker kill wallarm_fast_tester')
   end
 end
