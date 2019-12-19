@@ -17,9 +17,9 @@ The FAST plugin uses prerecorded TestRecords to run security tests as a separate
 
 ## Building locally
 
-The plugin is written in JRuby using the jpi framework (more on jpi here: https://github.com/jenkinsci/jenkins.rb/wiki/Getting-Started-With-Ruby-Plugins)
+The plugin is written in JRuby using the jpi framework (more on jpi [here]( https://github.com/jenkinsci/jenkins.rb/wiki/Getting-Started-With-Ruby-Plugins)).
 
-To build the plugin locally run the following code (you may use any ruby, but jpi officially supports only JRuby):
+To build the plugin locally run the following code (you may use any Ruby, but jpi officially supports only JRuby):
 ```
 gem install jpi
 git clone https://gl.wallarm.com/wallarm-cloud/libs/FastJenkinsPlugin
@@ -27,7 +27,7 @@ cd FastJenkinsPlugin
 jpi build
 ```
 
-The plugin will appear in `pkg/wallarm.hpi`
+The plugin will appear in `pkg/wallarm.hpi`.
 
 To import the plugin you need to add it via Jenkins:
 
