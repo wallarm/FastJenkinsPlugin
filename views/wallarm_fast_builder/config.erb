@@ -4,7 +4,7 @@ fields = [
   {
     title: 'Wallarm API TOKEN',
     field: 'wallarm_api_token',
-    description: 'Your Wallarm node token. Can be found at "https://my.wallarm.com/nodes"',
+    description: 'Your Wallarm node token. Can be found at "https://us1.my.wallarm.com/nodes" for North America and "https://my.wallarm.com/nodes" for Europe',
     type: :string,
     advanced: false
   },
@@ -25,14 +25,14 @@ fields = [
   {
     title: 'FAST port',
     field: 'fast_port',
-    description: 'Port of fast application (used in recording mode)',
+    description: 'Port of fast application (used in recording mode by other applications)',
     type: :string,
     advanced: false
   },
   {
     title: 'FAST name',
     field: 'fast_name',
-    description: 'Name of docker container. Has default values for both recording and testing modes',
+    description: 'Name of docker container',
     type: :string,
     advanced: false
   },
@@ -41,14 +41,14 @@ fields = [
   {
     title: 'Policy Id',
     field: 'policy_id',
-    description: 'Policy Id to use. Leave blank for default policy',
+    description: 'Policy Id to use. Leave blank for default policy (only playback mode)',
     type: :string,
     advanced: false
   },
   {
     title: 'Test record Id',
     field: 'test_record_id',
-    description: 'Test record you wish to use. Leave blank to use the latest one available',
+    description: 'Test record you wish to use. Leave blank to use the latest one available (only playback mode)',
     type: :string,
     advanced: false
   },
@@ -78,21 +78,21 @@ fields = [
   {
     title: 'Recording mode',
     field: 'record',
-    description: 'run in recording mode (record baseline instead of testing existing ones). Creates a new TestRecord',
+    description: 'Run in recording mode (record baseline instead of testing existing ones). Creates a new TestRecord',
     type: :boolean,
     advanced: false
   },
   {
     title: 'Stop on first fail',
     field: 'stop_on_first_fail',
-    description: 'Stop running tests as soon as a vulnerability is found',
+    description: 'Stop running tests as soon as a vulnerability is found (only playback mode)',
     type: :boolean,
     advanced: false
   },
   {
     title: 'Fail build',
     field: 'fail_build',
-    description: 'Fail build on completion if vulnerabilities are found',
+    description: 'Fail build if vulnerabilities are found (only playback mode)',
     type: :boolean,
     advanced: false
   },
@@ -113,6 +113,13 @@ fields = [
   },
 
 
+  {
+    title: 'Local docker ip',
+    field: 'local_docker_ip',
+    description: 'Adds the `--ip your_ip` paramater to FAST. May be required when specifying FAST as a proxy for other applications',
+    type: :string,
+    advanced: true
+  },
   {
     title: 'Wallarm version',
     field: 'wallarm_version',
@@ -140,7 +147,7 @@ fields = [
 f = taglib("/lib/form")
 
 fields.reject{|field| field[:advanced] }.each do |field|
-  f.entry(title: field[:title], field: field[:field], description: field[:description]) do
+  f.entry(title: field[:title], field: field[:field], name: field[:field], inline: true, description: field[:description]) do
     case field[:type]
     when :string
       f.textbox
@@ -157,7 +164,7 @@ end
 f.advanced do 
 
   fields.select{|field| field[:advanced] }.each do |field|
-    f.entry(title: field[:title], field: field[:field], description: field[:description]) do
+    f.entry(title: field[:title], field: field[:field], name: field[:field], inline: true, description: field[:description]) do
       case field[:type]
       when :string
         f.textbox
