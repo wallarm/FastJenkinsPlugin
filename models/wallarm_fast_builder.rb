@@ -19,6 +19,7 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
                 :fail_build,
                 :without_sudo,
                 :local_docker_network,
+                :local_docker_ip,
                 :wallarm_version,
                 :inactivity_timeout,
                 :test_run_rps
@@ -28,28 +29,36 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
   def initialize(attrs = {})
     attrs.delete_if { |_key, value| value.is_a?(String) && value.empty? }
 
+    converted_attrs = attrs.map do |key, value|
+      converted_value = [true, false].include?(value) ? value.to_s : value
+      [key, converted_value]
+    end
+
+    attrs = Hash[*converted_attrs.flatten]
+
     @wallarm_api_token    = attrs.fetch('wallarm_api_token', '')
     @app_host             = attrs.fetch('app_host', '127.0.0.1')
     @app_port             = attrs.fetch('app_port', 8080)
     @fast_port            = attrs.fetch('fast_port', nil)
-
     @policy_id            = attrs.fetch('policy_id', nil)
+
     @test_record_id       = attrs.fetch('test_record_id', nil)
     @wallarm_api_host     = attrs.fetch('wallarm_api_host', 'us1.api.wallarm.com')
     @test_run_name        = attrs.fetch('test_run_name', nil)
     @test_run_desc        = attrs.fetch('test_run_desc', nil)
+    @record               = attrs.fetch('record', 'false')
 
-    @record               = attrs.fetch('record', false)
-    @stop_on_first_fail   = attrs.fetch('stop_on_first_fail', false)
-    @fail_build           = attrs.fetch('fail_build', true)
-    @without_sudo         = attrs.fetch('without_sudo', false)
+    @stop_on_first_fail   = attrs.fetch('stop_on_first_fail', 'false')
+    @fail_build           = attrs.fetch('fail_build', 'true')
+    @without_sudo         = attrs.fetch('without_sudo', 'false')
     @local_docker_network = attrs.fetch('local_docker_network', nil) # used when target application is inside a docker network
+    @local_docker_ip      = attrs.fetch('local_docker_ip', nil) # used when FAST needs to be referenced as a proxy
 
     @wallarm_version      = attrs.fetch('wallarm_version', 'latest')
     @inactivity_timeout   = attrs.fetch('inactivity_timeout', nil)
     @test_run_rps         = attrs.fetch('test_run_rps', nil)
 
-    default_fast_name = @record ? 'wallarm_fast_recorder' : 'wallarm_fast_tester'
+    default_fast_name = true?(@record) ? 'wallarm_fast_recorder' : 'wallarm_fast_tester'
     @fast_name = attrs.fetch('fast_name', default_fast_name)
   end
 
@@ -67,6 +76,7 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
   # @param [Jenkins::Launcher] launcher the launcher that can run code on the node running this build
   # @param [Jenkins::Model::Listener] listener the listener for this build.
   def perform(build, launcher, listener)
+    fix_bools
     cmd = []
     add_required_params(cmd)
     add_optional_params(cmd)
@@ -81,6 +91,22 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
 
   private
 
+  # Due to errors for the jpi gem when saving/loading boolean values
+  # we store them as strings 'true' and 'false'.
+  # for proper operation we hotswap them back into boolean form when required
+  def fix_bools
+    @record             = true?(@record)
+    @stop_on_first_fail = true?(@stop_on_first_fail)
+    @fail_build         = true?(@fail_build)
+    @without_sudo       = true?(@without_sudo)
+  end
+
+  def true?(val)
+    val.to_s.downcase == "true"
+  end
+
+  # Due to jpi saving empty strings as '' instead of a more common nil
+  # this makes common ruby approaches to testing for empty values a bit more complicated
   def not_empty?(param)
     param && !param.empty?
   end
@@ -106,6 +132,7 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
     cmd << "-e TEST_RECORD_ID=#{@test_record_id}" if not_empty?(@test_record_id)
     cmd << "-e INACTIVITY_TIMEOUT=#{@inactivity_timeout}" if not_empty?(@inactivity_timeout)
     cmd << "--net #{@local_docker_network}" if not_empty?(@local_docker_network)
+    cmd << "--ip #{@local_docker_ip}" if not_empty?(@local_docker_ip)
 
     cmd << "-e TEST_RUN_NAME='#{@test_run_name}'" if not_empty?(@test_run_name)
     cmd << "-e TEST_RUN_DESC='#{@test_run_desc}'" if not_empty?(@test_run_desc)
