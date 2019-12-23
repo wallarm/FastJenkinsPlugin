@@ -113,7 +113,7 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
 
   def add_required_params(cmd)
     cmd << 'docker run --rm'
-    cmd << "--name #{@fast_name}"
+    cmd << "--name '#{@fast_name}'"
 
     if @record
       cmd << '-d'
@@ -157,7 +157,7 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
   end
 
   def execute_cmd(launcher, cmd, env = {}, opts = {})
-    cmd.unshift('sudo') unless @without_sudo
+    cmd.unshift('sudo') unless @without_sudo || cmd.first == 'sudo'
     launcher.execute(env, cmd.join(' '), opts)
   end
 
@@ -170,15 +170,26 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
       build.halt 'Cannot start FAST docker due to docker conflict'
     end
 
+    if docker_id.include? 'permission denied'
+      listener.error(docker_id)
+      build.halt 'Enable sudo or add docker to sudoers file to run this command'
+    end
+
+    if id_match = docker_id.match(/[0-9a-z]{64}/)
+      docker_id = id_match[0]
+    else
+      build.halt "Unknown error / cannot parse docker id: #{docker_id}"
+    end
+
     listener.info('Waiting for ready status')
     cmd_for_health = ["docker exec -t #{docker_id} supervisorctl status proxy"]
 
     10.times do |i|
+      sleep 5
+
       health = shell_command(launcher, cmd_for_health)
       listener.info("health check: #{health}")
       break if health.include? 'RUNNING'
-
-      sleep 10
 
       next unless i == 9
 
@@ -191,7 +202,8 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
     listener.info('FAST is ready to record')
 
     # No cleanup here.
-    # If next step starts, then we get a chance to kill existing dockers.
+    # We must release this docker and hope that it will finish on it's own
+    # or get killed user-side since we have no control / way of finding the right one
     # Otherwise it will be hanging
   end
 
@@ -221,6 +233,6 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
       listener.info('Security tests passed!')
     end
   ensure
-    execute_cmd('docker kill wallarm_fast_tester')
+    execute_cmd(launcher, ["docker kill #{fast_name}"])
   end
 end
