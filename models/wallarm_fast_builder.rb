@@ -22,7 +22,8 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
                 :local_docker_ip,
                 :wallarm_version,
                 :inactivity_timeout,
-                :test_run_rps
+                :test_run_rps,
+                :allowed_hosts
 
   # Invoked with the form parameters when this extension point
   # is created from a configuration screen.
@@ -37,8 +38,8 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
     attrs = Hash[*converted_attrs.flatten]
 
     @wallarm_api_token    = attrs.fetch('wallarm_api_token', '')
-    @app_host             = attrs.fetch('app_host', '127.0.0.1')
-    @app_port             = attrs.fetch('app_port', 8080)
+    @app_host             = attrs.fetch('app_host', '')
+    @app_port             = attrs.fetch('app_port', nil)
     @fast_port            = attrs.fetch('fast_port', nil)
     @policy_id            = attrs.fetch('policy_id', nil)
 
@@ -57,6 +58,7 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
     @wallarm_version      = attrs.fetch('wallarm_version', 'latest')
     @inactivity_timeout   = attrs.fetch('inactivity_timeout', nil)
     @test_run_rps         = attrs.fetch('test_run_rps', nil)
+    @allowed_hosts        = attrs.fetch('allowed_hosts', nil)
 
     default_fast_name = true?(@record) ? 'wallarm_fast_recorder' : 'wallarm_fast_tester'
     @fast_name = attrs.fetch('fast_name', default_fast_name)
@@ -121,14 +123,18 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
       cmd << "-p #{@fast_port}:8080"
     else
       cmd << '-e CI_MODE=testing'
-      cmd << "-e TEST_RUN_URI=http://#{@app_host}:#{@app_port}"
+      if not_empty?(@app_host)
+        uri = "http://#{@app_host}"
+        uri += ":#{@app_port}" if not_empty?(@app_port)
+        cmd << "-e TEST_RUN_URI=#{uri}"
+      end
     end
 
     cmd << '-e WALLARM_API_TOKEN=$WALLARM_API_TOKEN'
   end
 
   def add_optional_params(cmd)
-    cmd << "-e POLICY_ID=#{@policy_id}" if not_empty?(@policy_id)
+    cmd << "-e TEST_RUN_POLICY_ID=#{@policy_id}" if not_empty?(@policy_id)
     cmd << "-e TEST_RECORD_ID=#{@test_record_id}" if not_empty?(@test_record_id)
     cmd << "-e INACTIVITY_TIMEOUT=#{@inactivity_timeout}" if not_empty?(@inactivity_timeout)
     cmd << "--net #{@local_docker_network}" if not_empty?(@local_docker_network)
@@ -138,6 +144,7 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
     cmd << "-e TEST_RUN_DESC='#{@test_run_desc}'" if not_empty?(@test_run_desc)
     cmd << "-e TEST_RUN_STOP_ON_FIRST_FAIL=#{@stop_on_first_fail}" if @stop_on_first_fail
     cmd << "-e TEST_RUN_RPS=#{@test_run_rps}" if not_empty?(@test_run_rps)
+    cmd << "-e ALLOWED_HOSTS='#{@allowed_hosts}'" if not_empty?(@allowed_hosts)
   end
 
   def add_params_with_default_values(cmd)
@@ -202,7 +209,7 @@ class WallarmFastBuilder < Jenkins::Tasks::Builder
     listener.info('FAST is ready to record')
 
     # No cleanup here.
-    # We must release this docker and hope that it will finish on it's own
+    # We must release this docker and rely on it finishing on it's own or by outside means
     # or get killed user-side since we have no control / way of finding the right one
     # Otherwise it will be hanging
   end

@@ -11,14 +11,14 @@ fields = [
   {
     title: 'App host',
     field: 'app_host',
-    description: 'Address of your application (ip or name will do)',
+    description: 'Address of your application (ip or name will do, used only in playback mode)',
     type: :string,
     advanced: false
   },
   {
     title: 'App port',
     field: 'app_port',
-    description: 'Port of your application (defaults to 8080)',
+    description: 'Port of your application (used only in playback mode)',
     type: :string,
     advanced: false
   },
@@ -140,7 +140,14 @@ fields = [
     description: 'Request per second limit for your test run (optional)',
     type: :integer,
     advanced: true
-  }
+  },
+  {
+    title: 'Allowed hosts',
+    field: 'allowed_hosts',
+    description: 'limits the hosts that will be receiving payloads (only playback mode)',
+    type: :string,
+    advanced: true
+  },
 ]
 
 
