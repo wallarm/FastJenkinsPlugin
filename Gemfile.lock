@@ -4,11 +4,13 @@ GEM
     jenkins-plugin-runtime (0.2.3)
       json
       slop (~> 3.0.2)
-    json (2.2.0-java)
+    json (2.3.1)
+    json (2.3.1-java)
     slop (3.0.4)
 
 PLATFORMS
   java
+  ruby
 
 DEPENDENCIES
   jenkins-plugin-runtime (~> 0.2.3)
